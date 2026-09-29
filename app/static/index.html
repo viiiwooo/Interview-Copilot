@@ -1,0 +1,1546 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Interview Copilot</title>
+<style>
+  :root {
+    --bg: #0b0f17;
+    --surface: #121826;
+    --surface-2: #182033;
+    --border: #243049;
+    --text: #e8edf7;
+    --text-soft: #c3cce0;
+    --muted: #8391aa;
+    --accent: #7aa7ff;
+    --accent-soft: rgba(122, 167, 255, 0.14);
+    --question: #f3c46a;
+    --ok: #4fd18b;
+    --warn: #f3c46a;
+    --err: #ff6b6b;
+    --code-bg: #0d131f;
+    --strong: #ffffff;
+    --q-text: #ffe2a8;           /* interviewer question */
+    --q-bg: rgba(243, 196, 106, 0.09);
+    --hl-strong: #8fd0ff;        /* bold: key terms */
+    --hl-strong-bg: rgba(143, 208, 255, 0.10);
+    --hl-em: #f3c46a;            /* italic: nuances, examples */
+    --hl-code: #ff9f80;          /* inline code */
+    --hl-marker: #7aa7ff;        /* list bullets / numbers */
+    --hl-marker-2: #4fd18b;      /* nested list bullets */
+    --answer-size: 15px;
+    --panel-w: 330px;
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --bg: #f4f6fa;
+    --surface: #ffffff;
+    --surface-2: #eef1f7;
+    --border: #d9dfeb;
+    --text: #18202f;
+    --text-soft: #334058;
+    --muted: #66728a;
+    --accent: #2f6bf0;
+    --accent-soft: rgba(47, 107, 240, 0.10);
+    --question: #9a6400;
+    --ok: #188a4f;
+    --warn: #a86b00;
+    --err: #cf2e2e;
+    --code-bg: #f1f3f8;
+    --strong: #000000;
+    --q-text: #6b4600;
+    --q-bg: rgba(154, 100, 0, 0.08);
+    --hl-strong: #0b58b8;
+    --hl-strong-bg: rgba(11, 88, 184, 0.08);
+    --hl-em: #9a5b00;
+    --hl-code: #b3372a;
+    --hl-marker: #2f6bf0;
+    --hl-marker-2: #188a4f;
+    color-scheme: light;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Segoe UI", Inter, system-ui, -apple-system, Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: grid;
+    grid-template-columns: 1fr var(--panel-w);
+    grid-template-rows: auto 1fr;
+    height: 100vh;
+    overflow: hidden;
+  }
+  body.panel-hidden { grid-template-columns: 1fr 0; }
+  body.panel-hidden .side-panel { display: none; }
+
+  button, select, input, textarea { font: inherit; }
+
+  /* ---------------------------------------------------------- header */
+  .header {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    min-width: 0;
+  }
+  .brand { font-weight: 600; font-size: 15px; color: var(--accent); white-space: nowrap; }
+  .pill {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 12px; border-radius: 999px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    font-size: 13px; color: var(--text-soft);
+    min-width: 0; flex: 1; max-width: 640px;
+  }
+  .pill .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+  .pill .txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pill[data-state="listen"] .dot { background: var(--ok); }
+  .pill[data-state="asr"] .dot,
+  .pill[data-state="llm"] .dot { background: var(--warn); animation: pulse 1s ease-in-out infinite; }
+  .pill[data-state="done"] .dot { background: var(--accent); }
+  .pill[data-state="err"] .dot { background: var(--err); }
+  .pill[data-state="err"] { color: var(--err); }
+  @keyframes pulse { 50% { opacity: 0.3; } }
+  .latency { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .spacer { flex: 1; }
+  .tools { display: flex; gap: 4px; }
+  .icon-btn {
+    min-width: 32px; height: 30px; padding: 0 8px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface-2); color: var(--text-soft);
+    cursor: pointer; font-size: 13px; line-height: 1;
+  }
+  .icon-btn:hover { color: var(--text); border-color: var(--accent); }
+
+  /* ------------------------------------------------------------ feed */
+  .feed-wrap { position: relative; min-width: 0; min-height: 0; }
+  .feed {
+    height: 100%;
+    overflow-y: auto;
+    padding: 12px 16px 32px;
+    scroll-behavior: smooth;
+  }
+  .feed-inner { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
+  .empty {
+    margin: 4vh auto 0; text-align: center; color: var(--muted); font-size: 16px; line-height: 1.7;
+  }
+  .empty b { color: var(--text-soft); }
+
+  .entry {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 16px 12px;
+    transition: opacity 0.2s;
+  }
+  .entry.current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-soft), 0 6px 24px rgba(0,0,0,0.18); }
+  .entry.old { opacity: 0.5; }
+  .entry.old:hover { opacity: 1; }
+  .entry.old .answer { font-size: calc(var(--answer-size) * 0.9); }
+
+  /* time + copy sit in the card's top-right corner, no text labels */
+  .entry { position: relative; }
+  .q-row { position: absolute; top: 8px; right: 12px; display: flex; align-items: center; gap: 6px; }
+  .q-time { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .q-row .icon-btn { margin-left: auto; height: 24px; font-size: 12px; opacity: 0; transition: opacity 0.15s; }
+  .entry:hover .q-row .icon-btn { opacity: 1; }
+  .q-text {
+    font-size: calc(var(--answer-size) * 0.9); line-height: 1.3; margin: 0 76px 6px 0;
+    color: var(--q-text); background: var(--q-bg);
+    border-left: 3px solid var(--question); border-radius: 0 6px 6px 0;
+    padding: 5px 10px; font-style: italic;
+  }
+
+  /* answer: rendered Markdown, tuned for glance-reading */
+  .answer {
+    font-size: var(--answer-size);
+    line-height: 1.3;
+    color: var(--text);
+    max-width: 110ch;
+    overflow-wrap: anywhere;
+  }
+  .answer > * + * { margin-top: 0.3em; }
+  .answer strong {
+    color: var(--hl-strong); font-weight: 700;
+    background: var(--hl-strong-bg); border-radius: 3px; padding: 0 0.15em;
+  }
+  .answer em { color: var(--hl-em); font-style: italic; }
+  .answer strong em, .answer em strong { color: var(--hl-em); }
+  .answer h3, .answer h4, .answer h5 {
+    color: var(--accent); line-height: 1.3; margin-top: 0.8em;
+    padding-bottom: 0.15em; border-bottom: 1px solid var(--border);
+  }
+  .answer h3 { font-size: 1.08em; }
+  .answer h4 { font-size: 1em; }
+  .answer h5 { font-size: 0.95em; }
+  .answer > h3:first-child, .answer > h4:first-child, .answer > h5:first-child { margin-top: 0; }
+  .answer ul, .answer ol { padding-left: 1.5em; }
+  .answer li { margin: 0.05em 0; padding-left: 0.25em; }
+  .answer ol > li::marker { color: var(--hl-marker); font-weight: 800; }
+  .answer ul { list-style: none; }
+  .answer ul > li { position: relative; }
+  .answer ul > li::before {
+    content: "●"; position: absolute; left: -1.1em; top: 0.05em;
+    color: var(--hl-marker); font-size: 0.8em;
+  }
+  .answer li ul > li::before { content: "◆"; color: var(--hl-marker-2); font-size: 0.65em; top: 0.3em; }
+  .answer li li ul > li::before { content: "–"; font-size: 1em; top: 0; }
+  .answer li > ul, .answer li > ol { margin-top: 0.2em; font-size: 0.95em; }
+  .answer code {
+    font-family: "Cascadia Code", Consolas, "JetBrains Mono", monospace;
+    font-size: 0.86em; padding: 0.08em 0.35em; border-radius: 4px;
+    background: var(--code-bg); border: 1px solid var(--border);
+    color: var(--hl-code);
+  }
+  .answer pre {
+    position: relative; background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 12px; overflow-x: auto; line-height: 1.35;
+  }
+  .answer pre[data-lang]::before {
+    content: attr(data-lang); position: absolute; top: 4px; right: 10px;
+    font-size: 11px; color: var(--muted); font-family: inherit;
+  }
+  .answer pre code { background: none; border: 0; padding: 0; font-size: 0.8em; color: var(--text); }
+  .answer table { border-collapse: collapse; font-size: 0.9em; display: block; overflow-x: auto; }
+  .answer th, .answer td { border: 1px solid var(--border); padding: 5px 10px; text-align: left; vertical-align: top; }
+  .answer th { background: var(--surface-2); }
+  .answer blockquote { border-left: 3px solid var(--hl-em); padding-left: 12px; color: var(--text-soft); font-style: italic; }
+  .answer hr { border: 0; border-top: 1px solid var(--border); }
+  .answer.streaming::after {
+    content: ""; display: inline-block; width: 0.5em; height: 1em; margin-left: 2px;
+    vertical-align: -0.15em; background: var(--accent); animation: pulse 0.9s steps(2) infinite;
+  }
+  .answer.waiting { color: var(--muted); font-size: calc(var(--answer-size) * 0.8); }
+
+  /* accumulate mode: collected speech, pinned under the camera */
+  .sticky-top { position: sticky; top: 0; z-index: 5; max-width: 1200px; margin: 0 auto; }
+  .live {
+    display: flex; gap: 8px; align-items: baseline;
+    margin-bottom: 8px; padding: 6px 12px; border-radius: 10px;
+    background: var(--surface); border: 1px solid var(--border);
+    font-size: calc(var(--answer-size) * 0.9); line-height: 1.3;
+    color: var(--q-text); opacity: 0.8; font-style: italic;
+  }
+  .live[hidden] { display: none; }
+  .live-dot {
+    flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--err);
+    animation: pulse 1s ease-in-out infinite; align-self: center;
+  }
+  .pending {
+    margin: 0 0 10px;
+    background: var(--surface); border: 1px dashed var(--question); border-radius: 12px;
+    padding: 8px 12px; box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+  }
+  .pending[hidden] { display: none; }
+  .pending-text {
+    font-size: calc(var(--answer-size) * 0.9); line-height: 1.3; color: var(--q-text);
+    min-height: 1.3em; max-height: 30vh; overflow-y: auto; outline: none; white-space: pre-wrap;
+  }
+  .pending-text:empty::before { content: attr(data-ph); color: var(--muted); font-style: italic; }
+  .pending-bar { display: flex; gap: 6px; align-items: center; justify-content: flex-end; margin-top: 6px; }
+  .pending-bar .hint { margin-right: auto; }
+
+  .rec-badge {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: #fff;
+    background: var(--err); border-radius: 4px; padding: 2px 7px; white-space: nowrap;
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  .rec-badge[hidden] { display: none; }
+  .chk { display: flex; gap: 6px; align-items: center; }
+
+  .modal {
+    position: fixed; inset: 0; z-index: 20; background: rgba(0, 0, 0, 0.55);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .modal[hidden] { display: none; }
+  .modal-card {
+    width: min(960px, 94vw); max-height: 88vh; display: flex; flex-direction: column;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  }
+  .modal-head {
+    display: flex; gap: 8px; align-items: center; padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .modal-head b { color: var(--accent); white-space: nowrap; }
+  .modal-head .hint { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .modal-body { overflow-y: auto; padding: 14px 20px 18px; max-width: none; }
+
+  .jump {
+    position: absolute; left: 50%; top: 12px; transform: translateX(-50%);
+    padding: 8px 16px; border-radius: 999px; border: 0; cursor: pointer;
+    background: var(--accent); color: #fff; font-size: 13px; font-weight: 600;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3); display: none;
+  }
+  .jump.show { display: block; }
+
+  /* ------------------------------------------------------ side panel */
+  .side-panel {
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-size: 13px;
+  }
+  .card { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+  .card > summary, .card-title {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--muted); cursor: default; user-select: none; list-style: none;
+  }
+  .card > summary { cursor: pointer; }
+  .card > summary::before { content: "▸ "; }
+  .card[open] > summary::before { content: "▾ "; }
+  .card > summary + *, .card-title + * { margin-top: 8px; }
+  .stack { display: flex; flex-direction: column; gap: 8px; }
+  .row { display: flex; gap: 6px; align-items: center; }
+  .row > select, .row > input[type="text"], .row > input[type="number"] { flex: 1; min-width: 0; }
+  select, input[type="text"], input[type="number"], textarea {
+    padding: 7px 8px; background: var(--surface-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px; font-size: 13px;
+  }
+  select:focus, input:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  textarea { width: 100%; min-height: 110px; resize: vertical; line-height: 1.4; }
+  .btn {
+    padding: 7px 12px; border: 0; border-radius: 6px; cursor: pointer;
+    background: var(--accent); color: #fff; font-size: 13px; font-weight: 600; white-space: nowrap;
+  }
+  .btn:hover { filter: brightness(1.1); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; filter: none; }
+  .btn-green { background: #23915a; }
+  .btn-red { background: #c0392b; }
+  .hint { font-size: 12px; color: var(--muted); }
+  .hint.ok { color: var(--ok); }
+  .hint.bad { color: var(--err); }
+  .slider { display: grid; grid-template-columns: 110px 1fr 46px; gap: 6px; align-items: center; color: var(--muted); font-size: 12px; }
+  .slider input { accent-color: var(--accent); width: 100%; }
+  .slider span { text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+  .viz-canvas { width: 100%; height: 60px; display: block; background: var(--code-bg); border-radius: 4px; margin-top: 6px; }
+  .meter-track { position: relative; height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; margin-top: 6px; }
+  .meter-fill { height: 100%; width: 0; background: linear-gradient(90deg, #4fd18b, #f3c46a 70%, #ff6b6b 95%); transition: width 0.05s; }
+  .peak-hold { position: absolute; top: 0; width: 2px; height: 100%; background: #ff6b6b; left: 0; }
+  .seg { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .seg button {
+    flex: 1; padding: 7px 6px; border: 0; background: var(--surface-2); color: var(--muted);
+    cursor: pointer; font-size: 12px; font-weight: 600;
+  }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button.on { background: var(--accent-soft); color: var(--accent); }
+  .seg button:disabled { cursor: not-allowed; }
+  .level { height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
+  .level > div { height: 100%; width: 0; background: var(--ok); transition: width 0.08s; }
+  .keys { font-size: 12px; color: var(--muted); line-height: 1.8; }
+  kbd {
+    font-family: inherit; font-size: 11px; padding: 1px 6px; border-radius: 4px;
+    border: 1px solid var(--border); background: var(--surface-2); color: var(--text-soft);
+  }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  @media (max-width: 900px) {
+    body { grid-template-columns: 1fr; }
+    .side-panel {
+      position: fixed; top: 47px; right: 0; bottom: 0; width: min(var(--panel-w), 100vw);
+      z-index: 10; box-shadow: -8px 0 24px rgba(0,0,0,0.35);
+    }
+    body.panel-hidden { grid-template-columns: 1fr; }
+    .latency { display: none; }
+    .feed { padding: 14px 16px 40px; }
+  }
+</style>
+</head>
+<body>
+
+  <header class="header">
+    <span class="brand">🎧 Copilot</span>
+    <div class="pill" id="pill" data-state="idle" title="">
+      <span class="dot"></span><span class="txt" id="status">ожидание…</span>
+    </div>
+    <span class="latency" id="latency"></span>
+    <span class="rec-badge" id="recBadge" hidden title="Идёт запись встречи">● REC</span>
+    <span class="spacer"></span>
+    <div class="tools">
+      <button class="icon-btn" id="fontDown" title="Мельче (−)">A−</button>
+      <button class="icon-btn" id="fontUp" title="Крупнее (+)">A+</button>
+      <button class="icon-btn" id="themeBtn" title="Тема (T)">◐</button>
+      <button class="icon-btn" id="clearBtn" title="Очистить ленту">⌫</button>
+      <button class="icon-btn" id="panelBtn" title="Панель настроек (H)">⚙</button>
+    </div>
+  </header>
+
+  <main class="feed-wrap">
+    <div class="feed" id="feed">
+      <div class="sticky-top">
+      <div class="live" id="liveBox" hidden title="Распознаётся прямо сейчас (текст уточнится в конце фразы)">
+        <span class="live-dot"></span><span id="liveText"></span>
+      </div>
+      <div class="pending" id="pendingBox" hidden>
+        <div class="pending-text" id="pendingText" contenteditable="true" spellcheck="false"
+             data-ph="Режим накопления: распознанная речь копится здесь, текст можно править…"></div>
+        <div class="pending-bar">
+          <span class="hint" id="pendingHint"></span>
+          <button class="icon-btn" id="pendingClear" title="Очистить (Esc)">✕</button>
+          <button class="btn" id="pendingSend">➤ Отправить</button>
+        </div>
+      </div>
+      </div>
+      <div class="feed-inner" id="feedInner">
+        <div class="empty" id="empty">
+          Жду вопрос интервьюера…<br>
+          Нажмите <b>▶ Захват</b> в панели справа и выберите вкладку собеседования.
+        </div>
+      </div>
+    </div>
+    <button class="jump" id="jumpBtn">↑ К последнему ответу</button>
+  </main>
+
+  <aside class="side-panel" id="sidePanel">
+
+    <section class="card">
+      <div class="card-title">Захват звука</div>
+      <div class="stack">
+        <div class="seg" id="srcSeg">
+          <button data-src="tab" title="Звук вкладки с созвоном (Meet, Zoom web, Телемост…)">🖥 Вкладка</button>
+          <button data-src="mic" title="Микрофон">🎤 Микрофон</button>
+          <button data-src="both" title="Вкладка (собеседник) + микрофон (вы) — обе стороны разговора">🖥+🎤 Оба</button>
+        </div>
+        <div class="row" id="micRow">
+          <select id="bmicDevice" title="Входное устройство"></select>
+        </div>
+        <div class="hint" id="tabHint">
+          После «Захват» выберите вкладку собеседования и включите
+          <b>«Также поделиться звуком вкладки»</b>. Для Zoom/Teams-приложения:
+          «Весь экран» + «Поделиться системным звуком».
+        </div>
+        <div class="row">
+          <button class="btn btn-green" id="capStartBtn">▶ Захват</button>
+          <button class="btn btn-red" id="capStopBtn" disabled>■ Стоп</button>
+          <span class="hint" id="capState"></span>
+        </div>
+        <div class="level" title="Уровень захватываемого звука"><div id="capLevel"></div></div>
+        <label class="hint" style="display:flex;gap:6px;align-items:center">
+          <input type="checkbox" id="agcOn"> Авто-усиление (подстраивает громкость под VAD)
+        </label>
+        <div class="slider" id="micMixRow">
+          <label for="micMixGain">Микрофон</label>
+          <input type="range" id="micMixGain" min="0.1" max="10" step="0.1" value="4">
+          <span id="micMixGainVal">×4.0</span>
+        </div>
+        <div class="slider">
+          <label for="bmicGain">Усиление</label>
+          <input type="range" id="bmicGain" min="0.1" max="10" step="0.1" value="4">
+          <span id="bmicGainVal">×4.0</span>
+        </div>
+        <div class="slider">
+          <label for="bmicThresh">Порог VAD</label>
+          <input type="range" id="bmicThresh" min="0.1" max="0.9" step="0.01" value="0.3">
+          <span id="bmicThreshVal">0.30</span>
+        </div>
+        <div class="slider">
+          <label for="vadMinSilence">Пауза конца, мс</label>
+          <input type="range" id="vadMinSilence" min="100" max="2000" step="50" value="300">
+          <span id="vadMinSilenceVal">300</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-title">LLM (ответы)</div>
+      <div class="stack">
+        <select id="llmBackend">
+          <option value="local">💻 Локальный LLM</option>
+          <option value="deepseek_ext">🌐 DeepSeek (расширение)</option>
+          <option value="deepseek">🌐 DeepSeek (web/CDP)</option>
+        </select>
+        <div class="row" id="cdpPortRow" style="display:none">
+          <span class="hint">CDP порт</span>
+          <input type="number" id="cdpPort" min="1" max="65535" value="9222">
+        </div>
+        <span class="hint" id="dsState"></span>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-title">Отправка вопросов</div>
+      <div class="stack">
+        <label class="hint" style="display:flex;gap:6px;align-items:center">
+          <input type="checkbox" id="accOn"> Копить речь, отправлять по клавише
+        </label>
+        <div class="row">
+          <span class="hint">Клавиша</span>
+          <select id="accKey">
+            <option>F8</option><option>F9</option><option>F10</option><option>F12</option>
+            <option value="~">~ (Ё)</option><option>Pause</option><option>Ctrl+Space</option><option>Ctrl+Enter</option>
+          </select>
+        </div>
+        <span class="hint" id="accState"></span>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-title">Запись встречи</div>
+      <div class="stack">
+        <label class="hint chk"><input type="checkbox" id="recOn"> Записывать встречу (стенограмма .md)</label>
+        <label class="hint chk"><input type="checkbox" id="recAudio"> Сохранять аудио (audio.wav)</label>
+        <span class="hint" id="recState"></span>
+        <div class="row">
+          <select id="sessSel" title="Записанные встречи"></select>
+          <button class="icon-btn" id="sessRefresh" title="Обновить список">⟳</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="reviewBtn" title="Разобрать диалог через выбранный LLM → review.md">📝 Разобрать</button>
+          <button class="icon-btn" id="transcriptBtn">Стенограмма</button>
+          <button class="icon-btn" id="reviewShowBtn">Разбор</button>
+        </div>
+      </div>
+    </section>
+
+    <details class="card">
+      <summary>Промпт разбора встречи</summary>
+      <textarea id="reviewPrompt" placeholder="Инструкция для LLM: как разбирать стенограмму"></textarea>
+      <div class="row" style="margin-top:6px">
+        <span class="hint">Сохраняется при выходе из поля</span>
+        <span class="spacer"></span>
+        <button class="icon-btn" id="reviewPromptReset">По умолчанию</button>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary>Системный промпт</summary>
+      <textarea id="systemPrompt" placeholder="Системный промпт для локального LLM"></textarea>
+    </details>
+
+    <details class="card">
+      <summary>Проверка микрофона</summary>
+      <div class="row">
+        <button class="btn" id="bmicCheck">Проверить</button>
+        <span class="hint" id="bmicState"></span>
+      </div>
+      <canvas id="bmicWave" class="viz-canvas"></canvas>
+      <canvas id="bmicSpectrum" class="viz-canvas"></canvas>
+      <div class="hint" style="margin-top:4px">Пик: <span id="bmicPeakDb">—</span></div>
+      <div class="meter-track">
+        <div class="meter-fill" id="bmicPeakBar"></div>
+        <div class="peak-hold" id="bmicPeakHold"></div>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary>Прогон WAV-файла</summary>
+      <div class="row">
+        <input type="text" id="wavPath" placeholder="run/interview.wav">
+        <button class="btn" id="wavBtn">Запуск</button>
+      </div>
+      <span class="hint bad" id="error"></span>
+    </details>
+
+    <details class="card">
+      <summary>Горячие клавиши</summary>
+      <div class="keys">
+        <kbd>+</kbd> / <kbd>−</kbd> размер шрифта<br>
+        <kbd>H</kbd> скрыть/показать панель<br>
+        <kbd>T</kbd> светлая/тёмная тема<br>
+        <kbd>Home</kbd> к последнему ответу (он всегда сверху)<br>
+        <kbd>C</kbd> копировать последний ответ<br>
+        Режим накопления: <kbd>F8</kbd> (из любого окна) или <kbd>Пробел</kbd> — отправить,
+        <kbd>Esc</kbd> — очистить
+      </div>
+    </details>
+
+  </aside>
+
+  <div class="modal" id="docModal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <b id="docTitle"></b>
+        <span class="hint" id="docPath"></span>
+        <button class="icon-btn" id="docCopy" title="Копировать Markdown">⧉</button>
+        <button class="icon-btn" id="docClose" title="Закрыть (Esc)">✕</button>
+      </div>
+      <div class="answer modal-body" id="docBody"></div>
+    </div>
+  </div>
+
+<script>
+  // ================================================================ prefs
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('icp.' + k); return v === null ? d : v; } catch { return d; } },
+    set(k, v) { try { localStorage.setItem('icp.' + k, v); } catch { /* private mode */ } },
+  };
+  const root = document.documentElement;
+  let fontSize = parseFloat(store.get('font2', '15')) || 15;
+  function applyFont() { root.style.setProperty('--answer-size', fontSize + 'px'); store.set('font2', fontSize); }
+  function applyTheme(t) { root.dataset.theme = t; store.set('theme', t); }
+  applyFont();
+  applyTheme(store.get('theme', 'dark'));
+  if (store.get('panel', 'shown') === 'hidden') document.body.classList.add('panel-hidden');
+
+  document.getElementById('fontUp').onclick = () => { fontSize = Math.min(34, fontSize + 1); applyFont(); };
+  document.getElementById('fontDown').onclick = () => { fontSize = Math.max(11, fontSize - 1); applyFont(); };
+  document.getElementById('themeBtn').onclick = () => applyTheme(root.dataset.theme === 'light' ? 'dark' : 'light');
+  function togglePanel() {
+    document.body.classList.toggle('panel-hidden');
+    store.set('panel', document.body.classList.contains('panel-hidden') ? 'hidden' : 'shown');
+  }
+  document.getElementById('panelBtn').onclick = togglePanel;
+
+  // ============================================================ markdown
+  // Small, safe Markdown renderer: HTML is escaped first, then a fixed set of
+  // constructs is turned into tags. Tolerates half-streamed input.
+  function esc(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function mdInline(s) {
+    return s.split(/(`[^`\n]+`)/g).map((p) => {
+      if (p.length > 1 && p[0] === '`' && p[p.length - 1] === '`') return '<code>' + esc(p.slice(1, -1)) + '</code>';
+      let h = esc(p);
+      h = h.replace(/\*\*(?=\S)([^\n]*?\S)\*\*/g, '<strong>$1</strong>');
+      h = h.replace(/__(?=\S)([^\n]*?\S)__/g, '<strong>$1</strong>');
+      h = h.replace(/(^|[^*\w])\*(?=\S)([^*\n]*?\S)\*(?![*\w])/g, '$1<em>$2</em>');
+      h = h.replace(/\*\*/g, '');           // unmatched bold marker mid-stream
+      h = h.replace(/\[\^?\d+\]/g, '');     // citation markers [1]
+      return h;
+    }).join('');
+  }
+  // "Термин — пояснение" / "Термин: пояснение" at the start of a list item:
+  // bold the term like the model usually does, so every point scans the same.
+  function mdListItem(text) {
+    const m = text.match(/^([^:—–.!?*_`]{2,45}?)(:\s|\s[—–]\s)([\s\S]*)$/);
+    if (m) return '<strong>' + mdInline(m[1]) + '</strong>' + esc(m[2]) + mdInline(m[3]);
+    return mdInline(text);
+  }
+  function mdToHtml(src) {
+    const lines = src.replace(/\r/g, '').split('\n');
+    let html = '';
+    let para = [];
+    const lists = [];   // stack of { type, indent }
+    const flushPara = () => { if (para.length) { html += '<p>' + para.map(mdInline).join('<br>') + '</p>'; para = []; } };
+    const closeLists = (indent) => {
+      while (lists.length && lists[lists.length - 1].indent > indent) html += '</li></' + lists.pop().type + '>';
+    };
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      const fence = line.match(/^\s*```\s*([\w+#.-]*)/);
+      if (fence) {
+        flushPara(); closeLists(-1);
+        const buf = [];
+        i++;
+        while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) buf.push(lines[i++]);
+        i++;
+        html += '<pre' + (fence[1] ? ' data-lang="' + esc(fence[1]) + '"' : '') + '><code>' + esc(buf.join('\n')) + '</code></pre>';
+        continue;
+      }
+      if (/^\s*$/.test(line)) { flushPara(); i++; continue; }
+      const head = line.match(/^\s*(#{1,6})\s+(.*)$/);
+      if (head) {
+        flushPara(); closeLists(-1);
+        const tag = head[1].length <= 2 ? 'h3' : head[1].length === 3 ? 'h4' : 'h5';
+        html += '<' + tag + '>' + mdInline(head[2].replace(/#+\s*$/, '')) + '</' + tag + '>';
+        i++; continue;
+      }
+      if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) { flushPara(); closeLists(-1); html += '<hr>'; i++; continue; }
+      if (/^\s*\|/.test(line)) {
+        flushPara(); closeLists(-1);
+        const rows = [];
+        while (i < lines.length && /^\s*\|/.test(lines[i])) {
+          const l = lines[i++].trim();
+          if (/^\|?[\s:|-]+\|?$/.test(l) && l.includes('-')) continue;   // separator row
+          rows.push(l.replace(/^\||\|$/g, '').split('|').map((c) => c.trim()));
+        }
+        html += '<table>' + rows.map((r, ri) => '<tr>' + r.map((c) =>
+          (ri ? '<td>' : '<th>') + mdInline(c) + (ri ? '</td>' : '</th>')).join('') + '</tr>').join('') + '</table>';
+        continue;
+      }
+      if (/^\s*>/.test(line)) {
+        flushPara(); closeLists(-1);
+        const buf = [];
+        while (i < lines.length && /^\s*>/.test(lines[i])) buf.push(lines[i++].replace(/^\s*>\s?/, ''));
+        html += '<blockquote>' + mdToHtml(buf.join('\n')) + '</blockquote>';
+        continue;
+      }
+      const li = line.match(/^(\s*)([-*+•]|\d+[.)])\s+(.*)$/);
+      if (li) {
+        flushPara();
+        const indent = li[1].replace(/\t/g, '    ').length;
+        const type = /\d/.test(li[2]) ? 'ol' : 'ul';
+        closeLists(indent);
+        const top = lists[lists.length - 1];
+        if (top && top.indent === indent && top.type === type) {
+          html += '</li><li>';
+        } else {
+          if (top && top.indent === indent) html += '</li></' + lists.pop().type + '>';
+          const start = type === 'ol' && parseInt(li[2], 10) !== 1 ? ' start="' + parseInt(li[2], 10) + '"' : '';
+          html += '<' + type + start + '><li>';
+          lists.push({ type, indent });
+        }
+        html += mdListItem(li[3]);
+        i++; continue;
+      }
+      if (lists.length) {
+        // indented continuation of a list item, otherwise the list ends
+        if (/^\s+\S/.test(line)) { html += '<br>' + mdInline(line.trim()); i++; continue; }
+        closeLists(-1);
+      }
+      para.push(line.trim());
+      i++;
+    }
+    flushPara(); closeLists(-1);
+    return html;
+  }
+
+  // ================================================================ feed
+  const feed = document.getElementById('feed');
+  const feedInner = document.getElementById('feedInner');
+  const emptyEl = document.getElementById('empty');
+  const jumpBtn = document.getElementById('jumpBtn');
+  let current = null;   // { el, answerEl, raw }
+
+  // Newest entry is at the TOP of the feed: the answer being read stays right
+  // under the webcam, so the candidate's eyes stay close to the camera.
+  function nearTop() { return feed.scrollTop < 80; }
+  function toTop() { feed.scrollTop = 0; jumpBtn.classList.remove('show'); }
+  feed.addEventListener('scroll', () => { if (nearTop()) jumpBtn.classList.remove('show'); });
+  jumpBtn.onclick = toTop;
+
+  // Draw one entry's answer. Takes the entry explicitly: a render scheduled
+  // for an answer must land in that card even if a newer question arrived.
+  function renderEntry(entry) {
+    entry.dirty = false;
+    const a = entry.answerEl;
+    a.classList.toggle('streaming', entry.streaming);
+    if (entry.raw) {
+      a.classList.remove('waiting');
+      a.innerHTML = mdToHtml(entry.raw);
+    } else if (!entry.streaming) {
+      a.classList.remove('waiting');
+      a.textContent = '';
+    }
+  }
+
+  function finishCurrent() {
+    if (!current) return;
+    current.streaming = false;
+    renderEntry(current);
+  }
+
+  function copyText(t, btn) {
+    const done = () => { if (btn) { const o = btn.textContent; btn.textContent = '✓'; setTimeout(() => btn.textContent = o, 900); } };
+    if (navigator.clipboard) navigator.clipboard.writeText(t).then(done, () => {});
+  }
+
+  function newEntry(question) {
+    finishCurrent();
+    if (current) { current.el.classList.remove('current'); current.el.classList.add('old'); }
+    emptyEl.style.display = 'none';
+    const el = document.createElement('article');
+    el.className = 'entry current';
+    const t = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    el.innerHTML = '<div class="q-row"><span class="q-time"></span>' +
+      '<button class="icon-btn" title="Копировать ответ">⧉</button></div>' +
+      '<div class="q-text"></div><div class="answer waiting streaming">думаю…</div>';
+    el.querySelector('.q-time').textContent = t;
+    el.querySelector('.q-text').textContent = question || '…';
+    const entry = { el, answerEl: el.querySelector('.answer'), raw: '', streaming: true };
+    el.querySelector('.icon-btn').onclick = (ev) => copyText(entry.raw, ev.currentTarget);
+    feedInner.insertBefore(el, feedInner.firstChild);
+    current = entry;
+    toTop();  // a new question is always brought into view
+  }
+
+  function setAnswer(fullText) {
+    if (!current) newEntry('');
+    if (!fullText && !current.raw) return;
+    const entry = current;
+    entry.raw = fullText;
+    if (entry.dirty) return;   // one render per frame is enough while streaming
+    entry.dirty = true;
+    requestAnimationFrame(() => {
+      if (!entry.dirty) return;  // already drawn by finishCurrent
+      renderEntry(entry);
+      if (!nearTop()) jumpBtn.classList.add('show');  // user is reading older answers
+    });
+  }
+
+  document.getElementById('clearBtn').onclick = () => {
+    feedInner.querySelectorAll('.entry').forEach((e) => e.remove());
+    current = null;
+    emptyEl.style.display = '';
+  };
+
+  // ============================================================== status
+  const statusEl = document.getElementById('status');
+  const pill = document.getElementById('pill');
+  const latencyEl = document.getElementById('latency');
+  const errorEl = document.getElementById('error');
+
+  function statusState(t) {
+    const s = t.toLowerCase();
+    if (/ошибк|недоступ|⚠|не найден/.test(s)) return 'err';
+    if (/распозна/.test(s)) return 'asr';
+    if (/отвечаю|ответ идёт|→ deepseek|→ локальный/.test(s)) return 'llm';
+    if (/готово/.test(s)) return 'done';
+    if (/слушаю|захват идёт/.test(s)) return 'listen';
+    return 'idle';
+  }
+  function setStatus(t) {
+    statusEl.textContent = t;
+    pill.title = t;
+    pill.dataset.state = statusState(t);
+    if (/^готово/.test(t)) finishCurrent();
+  }
+
+  // ============================================================ websocket
+  let ws = null;
+  function connectWS() {
+    ws = new WebSocket(`ws://${location.host}/ws`);
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      if (msg.type === 'status') setStatus(msg.text);
+      else if (msg.type === 'question') { setLive(''); newEntry(msg.text); }
+      else if (msg.type === 'answer') setAnswer(msg.text);
+      else if (msg.type === 'pending') { renderPending(msg); setLive(''); }
+      else if (msg.type === 'partial') setLive(msg.text);
+      else if (msg.type === 'rec') { renderRec(msg); loadSessions(); }
+      else if (msg.type === 'review') onReview(msg);
+      else if (msg.type === 'latency') { latencyEl.textContent = msg.text; finishCurrent(); }
+      else if (msg.type === 'bcap') {
+        setCapButtons(msg.running);
+        capStateEl.textContent = msg.running ? 'захват идёт' : 'остановлен';
+      } else if (msg.type === 'ext') {
+        if (llmBackendSel.value === 'deepseek_ext') refreshExtState();
+      }
+    };
+    ws.onclose = () => { stopBrowserCapture(false); setTimeout(connectWS, 1500); };
+  }
+  connectWS();
+
+  async function postJSON(url, body) {
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    return res.json();
+  }
+
+  // ============================================ live (partial) transcript
+  const liveBox = document.getElementById('liveBox');
+  const liveText = document.getElementById('liveText');
+  function setLive(t) {
+    liveText.textContent = t || '';
+    liveBox.hidden = !t;
+  }
+
+  // ==================================================== accumulate mode
+  const accOn = document.getElementById('accOn');
+  const accKey = document.getElementById('accKey');
+  const accState = document.getElementById('accState');
+  const pendingBox = document.getElementById('pendingBox');
+  const pendingText = document.getElementById('pendingText');
+  const pendingHint = document.getElementById('pendingHint');
+  let pendingSynced = '';   // last text known to the server
+  let pendingTimer = 0;
+
+  function caretToEnd(el) {
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    r.collapse(false);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
+
+  function renderPending(d) {
+    accOn.checked = !!d.enabled;
+    if (d.hotkey) accKey.value = d.hotkey;
+    pendingBox.hidden = !d.enabled;
+    if (d.enabled) {
+      accState.textContent = d.hotkey_error
+        ? '⚠ ' + d.hotkey_error + ' — отправляйте Пробелом в окне копилота'
+        : 'клавиша ' + d.hotkey + ' работает из любого окна';
+      accState.className = 'hint ' + (d.hotkey_error ? 'bad' : 'ok');
+      pendingHint.textContent = (d.hotkey_error ? '' : d.hotkey + ' из любого окна · ') + 'Пробел здесь';
+    } else {
+      accState.textContent = '';
+      accState.className = 'hint';
+    }
+    const t = d.text || '';
+    if (document.activeElement === pendingText && t && t.startsWith(pendingSynced)) {
+      // user is editing: append only the newly recognized tail, keep the edits
+      const tail = t.slice(pendingSynced.length).trim();
+      if (tail) { pendingText.innerText = (pendingText.innerText.trim() + ' ' + tail).trim(); caretToEnd(pendingText); }
+    } else {
+      pendingText.innerText = t;
+    }
+    pendingSynced = t;
+  }
+
+  async function applyAccumulate() {
+    const want = accOn.checked;
+    try {
+      const res = await fetch('/api/accumulate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: want, hotkey: accKey.value }),
+      });
+      if (!res.ok) throw new Error(res.status === 404
+        ? 'сервер старой версии — перезапустите launch_web.bat'
+        : 'ошибка сервера ' + res.status);
+      const d = await res.json();
+      renderPending({ ...d, text: d.pending });
+    } catch (e) {
+      accOn.checked = false;
+      pendingBox.hidden = true;
+      accState.textContent = '⚠ ' + (e.message || 'сервер недоступен');
+      accState.className = 'hint bad';
+    }
+  }
+  accOn.onchange = applyAccumulate;
+  accKey.onchange = () => { if (accOn.checked) applyAccumulate(); };
+  fetch('/api/accumulate').then((r) => r.json()).then((d) => renderPending({ ...d, text: d.pending })).catch(() => {});
+
+  // edits in the box are pushed to the server, so the global hotkey sends them
+  pendingText.addEventListener('input', () => {
+    clearTimeout(pendingTimer);
+    pendingTimer = setTimeout(() => {
+      pendingSynced = pendingText.innerText.trim();
+      postJSON('/api/pending', { text: pendingSynced }).catch(() => {});
+    }, 300);
+  });
+  pendingText.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendPending(); }
+    else if (e.key === 'Escape') { e.preventDefault(); pendingText.blur(); }
+  });
+
+  async function sendPending() {
+    clearTimeout(pendingTimer);
+    const text = pendingText.innerText.trim();
+    pendingText.innerText = '';
+    pendingSynced = '';
+    try { await postJSON('/api/pending/send', { text }); } catch { setStatus('ошибка: сервер недоступен'); }
+  }
+  async function clearPending() {
+    clearTimeout(pendingTimer);
+    pendingText.innerText = '';
+    pendingSynced = '';
+    try { await postJSON('/api/pending/clear', {}); } catch { /* ignore */ }
+  }
+  document.getElementById('pendingSend').onclick = sendPending;
+  document.getElementById('pendingClear').onclick = clearPending;
+
+  // ============================================ meeting recording + review
+  const recOn = document.getElementById('recOn');
+  const recAudio = document.getElementById('recAudio');
+  const recState = document.getElementById('recState');
+  const recBadge = document.getElementById('recBadge');
+  const sessSel = document.getElementById('sessSel');
+  const docModal = document.getElementById('docModal');
+  const docTitle = document.getElementById('docTitle');
+  const docPath = document.getElementById('docPath');
+  const docBody = document.getElementById('docBody');
+  const reviewPromptEl = document.getElementById('reviewPrompt');
+  let docRaw = '';
+  let reviewSession = '';   // session whose review is streaming into the modal
+  let reviewDefault = '';
+
+  function renderRec(d) {
+    recOn.checked = !!d.enabled;
+    recAudio.checked = !!d.audio;
+    recBadge.hidden = !d.active;
+    recState.className = 'hint' + (d.active ? ' ok' : '');
+    recState.textContent = d.active ? 'идёт запись: sessions/' + d.session
+      : d.enabled ? 'запись начнётся вместе с захватом' : '';
+  }
+
+  async function applyRec() {
+    try {
+      const res = await fetch('/api/record', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: recOn.checked, audio: recAudio.checked }),
+      });
+      if (!res.ok) throw new Error(res.status === 404 ? 'сервер старой версии — перезапустите launch_web.bat' : 'ошибка ' + res.status);
+      renderRec(await res.json());
+      loadSessions();
+    } catch (e) {
+      recOn.checked = false;
+      recState.className = 'hint bad';
+      recState.textContent = '⚠ ' + e.message;
+    }
+  }
+  recOn.onchange = applyRec;
+  recAudio.onchange = applyRec;
+
+  async function loadSessions() {
+    try {
+      const d = await (await fetch('/api/sessions')).json();
+      const prev = sessSel.value;
+      sessSel.innerHTML = '';
+      for (const it of d.sessions) {
+        const o = document.createElement('option');
+        o.value = it.name;
+        o.textContent = it.name.replace('_', ' ') + (it.active ? ' · идёт' : '') + (it.review ? ' · ✓ разбор' : '');
+        sessSel.appendChild(o);
+      }
+      if (!d.sessions.length) {
+        const o = document.createElement('option');
+        o.value = ''; o.textContent = 'записей пока нет';
+        sessSel.appendChild(o);
+      }
+      if (prev && d.sessions.some((x) => x.name === prev)) sessSel.value = prev;
+    } catch { /* old server */ }
+  }
+  document.getElementById('sessRefresh').onclick = loadSessions;
+
+  function openDoc(title, path, md) {
+    docTitle.textContent = title;
+    docPath.textContent = path || '';
+    docPath.title = path || '';
+    docRaw = md || '';
+    docBody.innerHTML = md ? mdToHtml(md) : '<p class="hint">думаю…</p>';
+    docModal.hidden = false;
+  }
+  function closeDoc() { docModal.hidden = true; reviewSession = ''; }
+  document.getElementById('docClose').onclick = closeDoc;
+  docModal.addEventListener('click', (e) => { if (e.target === docModal) closeDoc(); });
+  document.getElementById('docCopy').onclick = (e) => copyText(docRaw, e.currentTarget);
+
+  async function showSessionFile(kind) {
+    const name = sessSel.value;
+    if (!name) return;
+    const res = await fetch(`/api/sessions/${encodeURIComponent(name)}/${kind}`);
+    if (!res.ok) {
+      openDoc(kind === 'review' ? 'Разбор' : 'Стенограмма', '',
+        kind === 'review' ? '_Разбора ещё нет — нажмите «📝 Разобрать»._' : '_Файл не найден._');
+      return;
+    }
+    const d = await res.json();
+    reviewSession = '';
+    openDoc((kind === 'review' ? 'Разбор · ' : 'Стенограмма · ') + name, d.path, d.text);
+  }
+  document.getElementById('transcriptBtn').onclick = () => showSessionFile('transcript');
+  document.getElementById('reviewShowBtn').onclick = () => showSessionFile('review');
+
+  document.getElementById('reviewBtn').onclick = async () => {
+    const res = await fetch('/api/review', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session: sessSel.value || null }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { openDoc('Разбор', '', '⚠ ' + (d.error || d.detail || 'ошибка ' + res.status)); return; }
+    reviewSession = d.session;
+    openDoc('Разбор · ' + d.session, 'идёт разбор…', '');
+  };
+
+  function onReview(m) {
+    if (docModal.hidden || m.session !== reviewSession) return;
+    docRaw = m.text || '';
+    if (docRaw) docBody.innerHTML = mdToHtml(docRaw);
+    if (m.done) {
+      docPath.textContent = m.error ? '⚠ ' + m.error : (m.path || '');
+      docPath.title = m.path || '';
+      loadSessions();
+    }
+  }
+
+  fetch('/api/record').then((r) => r.ok ? r.json() : null).then((d) => { if (d) renderRec(d); }).catch(() => {});
+  loadSessions();
+  fetch('/api/review_prompt').then((r) => r.ok ? r.json() : null).then((d) => {
+    if (!d) return;
+    reviewDefault = d.default || '';
+    reviewPromptEl.value = d.prompt || '';
+  }).catch(() => {});
+  reviewPromptEl.addEventListener('change', () => {
+    postJSON('/api/review_prompt', { prompt: reviewPromptEl.value }).catch(() => {});
+  });
+  document.getElementById('reviewPromptReset').onclick = () => {
+    reviewPromptEl.value = reviewDefault;
+    postJSON('/api/review_prompt', { prompt: reviewDefault }).catch(() => {});
+  };
+
+  // ============================================================ WAV run
+  document.getElementById('wavBtn').onclick = async () => {
+    const wav = document.getElementById('wavPath').value.trim();
+    if (!wav) { errorEl.textContent = 'Укажите путь'; return; }
+    errorEl.textContent = '';
+    setStatus('отправляю…');
+    try {
+      const data = await postJSON('/api/run', { wav });
+      if (data.error) errorEl.textContent = data.error;
+    } catch (e) { errorEl.textContent = 'Ошибка: ' + e.message; }
+  };
+
+  // ======================================================= system prompt
+  const promptEl = document.getElementById('systemPrompt');
+  fetch('/api/prompt').then((r) => r.json()).then((d) => { if (!promptEl.value) promptEl.value = d.prompt || ''; }).catch(() => {});
+  async function sendSystemPrompt() {
+    const p = promptEl.value.trim();
+    if (!p) return;
+    try { await postJSON('/api/prompt', { prompt: p }); } catch { /* server not ready */ }
+  }
+  promptEl.addEventListener('change', sendSystemPrompt);
+
+  // ======================================================= capture state
+  const capStartBtn = document.getElementById('capStartBtn');
+  const capStopBtn = document.getElementById('capStopBtn');
+  const capStateEl = document.getElementById('capState');
+
+  function setCapButtons(running) {
+    capStartBtn.disabled = running;
+    capStopBtn.disabled = !running;
+    document.querySelectorAll('#srcSeg button').forEach((b) => { b.disabled = running; });
+  }
+
+  async function syncState() {
+    try {
+      const data = await (await fetch('/api/status')).json();
+      if (data.status) setStatus(data.status);
+      setCapButtons(data.browser_active);
+      if (data.browser_active) capStateEl.textContent = 'захват идёт';
+      if (data.question) { newEntry(data.question); if (data.answer) setAnswer(data.answer); finishCurrent(); }
+    } catch { /* server not ready yet */ }
+  }
+  syncState();
+
+  // ========================================================= LLM backend
+  const llmBackendSel = document.getElementById('llmBackend');
+  const cdpPortRow = document.getElementById('cdpPortRow');
+  const cdpPortInput = document.getElementById('cdpPort');
+  const dsStateEl = document.getElementById('dsState');
+
+  function setDsState(text, ok) {
+    dsStateEl.textContent = text;
+    dsStateEl.className = 'hint ' + (text ? (ok ? 'ok' : 'bad') : '');
+  }
+
+  async function applyLlmBackend() {
+    const backend = llmBackendSel.value;
+    cdpPortRow.style.display = backend === 'deepseek' ? '' : 'none';
+    try {
+      const body = backend === 'deepseek'
+        ? { backend, cdp_port: parseInt(cdpPortInput.value, 10) || 9222 }
+        : { backend };
+      const data = await postJSON('/api/llm_backend', body);
+      if (backend === 'local') setDsState('', true);
+      else if (data.status !== 'ok') setDsState(data.error || 'ошибка', false);
+      else if (backend === 'deepseek_ext') refreshExtState();
+      else setDsState('Chrome CDP на порту ' + (parseInt(cdpPortInput.value, 10) || 9222), true);
+    } catch (e) {
+      setDsState('сервер недоступен: ' + e.message, false);
+    }
+  }
+
+  async function refreshExtState() {
+    try {
+      const d = await (await fetch('/api/deepseek_ext')).json();
+      setDsState(d.connected ? '● ' + d.info : 'расширение: ' + (d.info || 'не подключено'), d.connected);
+    } catch { setDsState('сервер недоступен', false); }
+  }
+  setInterval(() => { if (llmBackendSel.value === 'deepseek_ext') refreshExtState(); }, 15000);
+
+  llmBackendSel.onchange = applyLlmBackend;
+  cdpPortInput.onchange = () => { if (llmBackendSel.value === 'deepseek') applyLlmBackend(); };
+  fetch('/api/llm_backend').then((r) => r.json()).then((d) => {
+    llmBackendSel.value = d.backend || 'local';
+    cdpPortInput.value = d.cdp_port || 9222;
+    applyLlmBackend();
+  }).catch(() => {});
+
+  // ============================== browser capture: Web Audio -> WS frames
+  const bmicSelect = document.getElementById('bmicDevice');
+  let capStream = null, capCtx = null, capProc = null;
+  let capPending = new Float32Array(0);
+
+  function capResampleTo16k(input, fromRate) {
+    if (fromRate === 16000) return input;
+    const ratio = fromRate / 16000;
+    const outLen = Math.max(1, Math.floor((input.length - 1) / ratio));
+    const out = new Float32Array(outLen);
+    for (let i = 0; i < outLen; i++) {
+      const pos = i * ratio;
+      const i0 = Math.floor(pos);
+      const i1 = Math.min(i0 + 1, input.length - 1);
+      const frac = pos - i0;
+      out[i] = input[i0] * (1 - frac) + input[i1] * frac;
+    }
+    return out;
+  }
+
+  function capSendChunks(samples) {
+    const total = capPending.length + samples.length;
+    const merged = new Float32Array(total);
+    merged.set(capPending, 0);
+    merged.set(samples, capPending.length);
+    const full = Math.floor(total / 512);
+    for (let i = 0; i < full; i++) {
+      const i16 = new Int16Array(512);
+      for (let j = 0; j < 512; j++) {
+        const s = Math.max(-1, Math.min(1, merged[i * 512 + j]));
+        i16[j] = s < 0 ? Math.round(s * 32768) : Math.round(s * 32767);
+      }
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(i16.buffer);
+    }
+    capPending = merged.slice(full * 512);
+  }
+
+  // ---- capture source: the interview tab (getDisplayMedia) or a microphone.
+  // Tab audio holds only the remote side (interviewer), so every segment is a
+  // candidate question; it is already at a normal level, hence gain 1 and a
+  // longer end-of-phrase pause (fewer questions split in two).
+  // "both" mixes the tab (interviewer) with the microphone (you): the mic gets
+  // its own pre-gain, the main gain/AGC applies to the mix.
+  const SRC_DEFAULTS = {
+    tab: { gain: 1.0, pause: 800 },
+    mic: { gain: 4.0, pause: 300 },
+    both: { gain: 1.0, pause: 600, mic: 4.0 },
+  };
+  let capSource = store.get('src', 'tab');
+  let capGainNode = null, capMicGainNode = null, capAnalyser = null, capLevelRaf = 0;
+  let capExtraStream = null;  // the mic stream in "both" mode
+  const srcSeg = document.getElementById('srcSeg');
+  const capLevelEl = document.getElementById('capLevel');
+
+  function srcPref(src, key) {
+    const v = parseFloat(store.get(src + '.' + key, ''));
+    return Number.isFinite(v) ? v : SRC_DEFAULTS[src][key];
+  }
+  function applySource(src) {
+    if (!SRC_DEFAULTS[src]) src = 'tab';
+    capSource = src;
+    store.set('src', src);
+    srcSeg.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.src === src));
+    document.getElementById('micRow').style.display = src !== 'tab' ? '' : 'none';
+    document.getElementById('tabHint').style.display = src !== 'mic' ? '' : 'none';
+    document.getElementById('micMixRow').style.display = src === 'both' ? '' : 'none';
+    agcOn.checked = store.get(src + '.agc', src !== 'mic' ? '1' : '0') === '1';
+    micMixGain.value = srcPref('both', 'mic');
+    micMixGain.oninput();
+    bmicGain.value = srcPref(src, 'gain');
+    vadMinSilence.value = srcPref(src, 'pause');
+    bmicGain.oninput();
+    vadMinSilence.oninput();
+  }
+  srcSeg.querySelectorAll('button').forEach((b) => { b.onclick = () => applySource(b.dataset.src); });
+
+  async function openTabStream() {
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,  // Chrome only offers tab audio together with video
+      audio: {
+        echoCancellation: false, noiseSuppression: false, autoGainControl: false,
+        suppressLocalAudioPlayback: false,  // keep hearing the interviewer
+      },
+      preferCurrentTab: false,
+      selfBrowserSurface: 'exclude',  // do not offer the copilot tab itself
+      surfaceSwitching: 'include',
+      systemAudio: 'include',
+    });
+    if (!stream.getAudioTracks().length) {
+      stream.getTracks().forEach((t) => t.stop());
+      throw new Error('нет звука: включите «Также поделиться звуком вкладки»');
+    }
+    // the video is not needed; audio keeps flowing after the video track stops
+    stream.getVideoTracks().forEach((t) => t.stop());
+    return stream;
+  }
+
+  function capLevelLoop() {
+    if (!capAnalyser) { capLevelEl.style.width = '0'; return; }
+    const buf = new Float32Array(capAnalyser.fftSize);
+    capAnalyser.getFloatTimeDomainData(buf);
+    let peak = 0;
+    for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i]));
+    capLevelEl.style.width = Math.min(100, peak * 100) + '%';
+    capLevelEl.style.background = peak > 0.97 ? 'var(--err)' : 'var(--ok)';
+    if (agcOn.checked && agcShown) bmicGainVal.textContent = 'авто ×' + agcShown.toFixed(1);
+    capLevelRaf = requestAnimationFrame(capLevelLoop);
+  }
+
+  // ---- slow automatic gain: keeps speech peaks near AGC_TARGET so the VAD and
+  // ASR see a normal level whatever the call volume. Runs in the audio callback
+  // (keeps working while this tab is in the background, unlike rAF).
+  const AGC_TARGET = 0.5, AGC_MIN = 0.5, AGC_MAX = 8, AGC_FLOOR = 0.003;
+  let agcEnv = 0;
+  function agcStep(block) {
+    if (!capGainNode) return;
+    let peak = 0;
+    for (let i = 0; i < block.length; i++) { const a = Math.abs(block[i]); if (a > peak) peak = a; }
+    const g = capGainNode.gain.value;
+    const pre = peak / Math.max(g, 1e-6);         // level before our gain
+    agcEnv = Math.max(pre, agcEnv * 0.998);       // peak envelope, ~15 s decay
+    if (agcEnv < AGC_FLOOR) return;               // silence: do not pump up the noise
+    const want = Math.min(AGC_MAX, Math.max(AGC_MIN, AGC_TARGET / agcEnv));
+    // fast down (avoid clipping), slow up
+    const next = want < g ? g + (want - g) * 0.3 : g + (want - g) * 0.02;
+    capGainNode.gain.value = next;
+    agcShown = next;
+  }
+  let agcShown = 0;
+  const agcOn = document.getElementById('agcOn');
+  agcOn.onchange = () => store.set(capSource + '.agc', agcOn.checked ? '1' : '0');
+
+  async function startBrowserCapture() {
+    await sendSystemPrompt();
+    try {
+      await postJSON('/api/vad_config', {
+        min_silence_ms: parseInt(vadMinSilence.value, 10),
+        threshold: parseFloat(bmicThresh.value),
+      });
+    } catch { /* ignore */ }
+
+    const src = capSource;
+    capStateEl.textContent = src !== 'mic' ? 'выберите вкладку…' : 'запрашиваю…';
+    const openMic = () => {
+      const audio = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+      if (bmicSelect.value) audio.deviceId = { exact: bmicSelect.value };
+      return navigator.mediaDevices.getUserMedia({ audio });
+    };
+    try {
+      if (src === 'mic') {
+        capStream = await openMic();
+      } else {
+        capStream = await openTabStream();
+        // echo cancellation is off: use headphones, or the mic re-captures the interviewer
+        if (src === 'both') capExtraStream = await openMic();
+      }
+      // "Stop sharing" in Chrome's bar (or the tab closing) ends the track
+      capStream.getAudioTracks()[0].addEventListener('ended', () => stopBrowserCapture(true));
+      const AC = window.AudioContext || window.webkitAudioContext;
+      capCtx = new AC({ sampleRate: 16000 });
+      const source = capCtx.createMediaStreamSource(capStream);
+      const gainNode = capCtx.createGain();
+      gainNode.gain.value = parseFloat(bmicGain.value) || 1.0;
+      capGainNode = gainNode;
+      const proc = capCtx.createScriptProcessor(512, 1, 1);  // 1 channel: stereo tab audio is downmixed
+      source.connect(gainNode);
+      if (capExtraStream) {
+        capExtraStream.getAudioTracks()[0].addEventListener('ended', () => stopBrowserCapture(true));
+        const micSource = capCtx.createMediaStreamSource(capExtraStream);
+        capMicGainNode = capCtx.createGain();
+        capMicGainNode.gain.value = parseFloat(micMixGain.value) || 4.0;
+        micSource.connect(capMicGainNode);
+        capMicGainNode.connect(gainNode);  // summed with the tab before the main gain
+      }
+      gainNode.connect(proc);
+      capAnalyser = capCtx.createAnalyser();
+      capAnalyser.fftSize = 1024;
+      gainNode.connect(capAnalyser);
+      capLevelRaf = requestAnimationFrame(capLevelLoop);
+      const mute = capCtx.createGain();
+      mute.gain.value = 0;
+      proc.connect(mute);
+      mute.connect(capCtx.destination);
+      agcEnv = 0;
+      proc.onaudioprocess = (e) => {
+        const block = e.inputBuffer.getChannelData(0);
+        if (agcOn.checked) agcStep(block);
+        capSendChunks(capResampleTo16k(block, capCtx.sampleRate));
+      };
+      capProc = proc;
+      capPending = new Float32Array(0);
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'capture_start', source: src }));
+      setCapButtons(true);
+      capStateEl.textContent = { tab: 'слушаю вкладку', mic: 'слушаю микрофон',
+        both: 'слушаю вкладку и микрофон' }[src];
+      if (src !== 'tab') populateBmicDevices();
+    } catch (err) {
+      capStateEl.textContent = 'ошибка: ' + (err.name || err.message);
+      stopBrowserCapture(false);
+    }
+  }
+
+  function stopBrowserCapture(notifyServer) {
+    if (capLevelRaf) cancelAnimationFrame(capLevelRaf);
+    capLevelRaf = 0;
+    capAnalyser = null;
+    capGainNode = null;
+    capMicGainNode = null;
+    capLevelEl.style.width = '0';
+    if (capProc) { capProc.disconnect(); capProc = null; }
+    if (capStream) { capStream.getTracks().forEach((t) => t.stop()); capStream = null; }
+    if (capExtraStream) { capExtraStream.getTracks().forEach((t) => t.stop()); capExtraStream = null; }
+    if (capCtx) { capCtx.close().catch(() => {}); capCtx = null; }
+    capPending = new Float32Array(0);
+    if (notifyServer !== false && ws && ws.readyState === WebSocket.OPEN)
+      ws.send(JSON.stringify({ type: 'capture_stop' }));
+    setCapButtons(false);
+    capStateEl.textContent = 'остановлен';
+  }
+
+  capStartBtn.onclick = startBrowserCapture;
+  capStopBtn.onclick = () => stopBrowserCapture(true);
+
+  // ============================================================ sliders
+  const bmicGain = document.getElementById('bmicGain');
+  const bmicGainVal = document.getElementById('bmicGainVal');
+  const bmicThresh = document.getElementById('bmicThresh');
+  const bmicThreshVal = document.getElementById('bmicThreshVal');
+  const vadMinSilence = document.getElementById('vadMinSilence');
+  const vadMinSilenceVal = document.getElementById('vadMinSilenceVal');
+
+  bmicGain.oninput = () => {
+    bmicGainVal.textContent = '×' + parseFloat(bmicGain.value).toFixed(1);
+    if (bmicGainNode) bmicGainNode.gain.value = parseFloat(bmicGain.value);
+    if (capGainNode) capGainNode.gain.value = parseFloat(bmicGain.value);
+  };
+  bmicGain.onchange = () => store.set(capSource + '.gain', bmicGain.value);
+  const micMixGain = document.getElementById('micMixGain');
+  const micMixGainVal = document.getElementById('micMixGainVal');
+  micMixGain.oninput = () => {
+    micMixGainVal.textContent = '×' + parseFloat(micMixGain.value).toFixed(1);
+    if (capMicGainNode) capMicGainNode.gain.value = parseFloat(micMixGain.value);
+  };
+  micMixGain.onchange = () => store.set('both.mic', micMixGain.value);
+  bmicThresh.oninput = () => { bmicThreshVal.textContent = parseFloat(bmicThresh.value).toFixed(2); };
+  vadMinSilence.oninput = () => { vadMinSilenceVal.textContent = vadMinSilence.value; };
+  vadMinSilence.onchange = () => store.set(capSource + '.pause', vadMinSilence.value);
+
+  // ==================================== mic check / visualization (local)
+  const bmicCheckBtn = document.getElementById('bmicCheck');
+  const bmicStateEl = document.getElementById('bmicState');
+  const bmicWave = document.getElementById('bmicWave');
+  const bmicSpectrum = document.getElementById('bmicSpectrum');
+  const bmicPeakBar = document.getElementById('bmicPeakBar');
+  const bmicPeakHold = document.getElementById('bmicPeakHold');
+  const bmicPeakDb = document.getElementById('bmicPeakDb');
+
+  let bmicStream = null, bmicAudioCtx = null, bmicAnalyser = null;
+  let bmicTimeData = null, bmicFreqData = null;
+  let bmicMeterRaf = 0, bmicPeakHoldVal = 0;
+  let bmicGainNode = null;
+
+  async function populateBmicDevices() {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const inputs = devices.filter((d) => d.kind === 'audioinput');
+      const prev = bmicSelect.value || store.get('mic', '');
+      bmicSelect.innerHTML = '';
+      inputs.forEach((d, i) => {
+        const opt = document.createElement('option');
+        opt.value = d.deviceId;
+        opt.textContent = d.label || `Микрофон ${i + 1}`;
+        bmicSelect.appendChild(opt);
+      });
+      if (prev && inputs.some((d) => d.deviceId === prev)) bmicSelect.value = prev;
+    } catch { /* no permission yet */ }
+  }
+  bmicSelect.onchange = () => store.set('mic', bmicSelect.value);
+
+  function bmicFitCanvas(c) {
+    const dpr = window.devicePixelRatio || 1;
+    c.width = Math.max(1, Math.round(c.clientWidth * dpr));
+    c.height = Math.max(1, Math.round(c.clientHeight * dpr));
+  }
+
+  function bmicVizLoop() {
+    if (!bmicAnalyser || !bmicStream) return;
+    bmicAnalyser.getFloatTimeDomainData(bmicTimeData);
+    let peak = 0;
+    for (let i = 0; i < bmicTimeData.length; i++) {
+      const a = Math.abs(bmicTimeData[i]);
+      if (a > peak) peak = a;
+    }
+    bmicPeakHoldVal = Math.max(peak, bmicPeakHoldVal * 0.995);
+    bmicPeakBar.style.width = Math.min(100, peak * 100) + '%';
+    bmicPeakHold.style.left = Math.min(100, bmicPeakHoldVal * 100) + '%';
+    bmicPeakDb.textContent = peak > 1e-4 ? (20 * Math.log10(peak)).toFixed(1) + ' dB' : '—';
+
+    const accent = getComputedStyle(root).getPropertyValue('--accent').trim() || '#7aa7ff';
+    bmicFitCanvas(bmicWave);
+    const ctx = bmicWave.getContext('2d');
+    ctx.clearRect(0, 0, bmicWave.width, bmicWave.height);
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = Math.max(1.5, bmicWave.height * 0.02);
+    ctx.beginPath();
+    for (let i = 0; i < bmicTimeData.length; i++) {
+      const x = i / (bmicTimeData.length - 1) * bmicWave.width;
+      const y = bmicWave.height / 2 - bmicTimeData[i] * bmicWave.height * 0.48;
+      if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+    }
+    ctx.stroke();
+
+    bmicAnalyser.getByteFrequencyData(bmicFreqData);
+    bmicFitCanvas(bmicSpectrum);
+    const sctx = bmicSpectrum.getContext('2d');
+    sctx.clearRect(0, 0, bmicSpectrum.width, bmicSpectrum.height);
+    const bars = 48, nyq = bmicAudioCtx.sampleRate / 2, bins = bmicFreqData.length;
+    const bw = bmicSpectrum.width / bars;
+    for (let i = 0; i < bars; i++) {
+      const f0 = 60 * Math.pow(8000 / 60, i / bars);
+      const f1 = 60 * Math.pow(8000 / 60, (i + 1) / bars);
+      const b0 = Math.max(0, Math.floor(f0 / nyq * bins));
+      const b1 = Math.max(b0 + 1, Math.min(bins, Math.ceil(f1 / nyq * bins)));
+      let sum = 0;
+      for (let b = b0; b < b1; b++) sum += bmicFreqData[b];
+      const v = sum / (b1 - b0) / 255;
+      sctx.fillStyle = v > 0.7 ? '#ff6b6b' : v > 0.35 ? '#f3c46a' : '#4fd18b';
+      const h = Math.max(1, v * (bmicSpectrum.height - 4));
+      sctx.fillRect(i * bw + 1, bmicSpectrum.height - h, bw - 2, h);
+    }
+    bmicMeterRaf = requestAnimationFrame(bmicVizLoop);
+  }
+
+  function bmicStopStream() {
+    if (bmicMeterRaf) cancelAnimationFrame(bmicMeterRaf);
+    bmicMeterRaf = 0;
+    if (bmicGainNode) { bmicGainNode.disconnect(); bmicGainNode = null; }
+    if (bmicAnalyser) { bmicAnalyser.disconnect(); bmicAnalyser = null; }
+    if (bmicAudioCtx) { bmicAudioCtx.close().catch(() => {}); bmicAudioCtx = null; }
+    if (bmicStream) { bmicStream.getTracks().forEach((t) => t.stop()); bmicStream = null; }
+    bmicPeakHoldVal = 0;
+    bmicPeakBar.style.width = '0%'; bmicPeakHold.style.left = '0%'; bmicPeakDb.textContent = '—';
+    [bmicWave, bmicSpectrum].forEach((c) => c.getContext('2d').clearRect(0, 0, c.width, c.height));
+  }
+
+  async function bmicCheck() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!navigator.mediaDevices?.getUserMedia || !AC) { bmicStateEl.textContent = 'getUserMedia недоступен'; return; }
+    bmicStopStream();
+    bmicStateEl.textContent = 'запрашиваю…';
+    try {
+      const audio = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+      if (bmicSelect.value) audio.deviceId = { exact: bmicSelect.value };
+      bmicStream = await navigator.mediaDevices.getUserMedia({ audio });
+    } catch (e) { bmicStateEl.textContent = 'микрофон: ' + (e.name || e.message); return; }
+    bmicAudioCtx = new AC();
+    const source = bmicAudioCtx.createMediaStreamSource(bmicStream);
+    bmicGainNode = bmicAudioCtx.createGain();
+    bmicGainNode.gain.value = parseFloat(bmicGain.value) || 4.0;
+    bmicAnalyser = bmicAudioCtx.createAnalyser();
+    bmicAnalyser.fftSize = 4096;
+    source.connect(bmicGainNode);
+    bmicGainNode.connect(bmicAnalyser);
+    bmicTimeData = new Float32Array(bmicAnalyser.fftSize);
+    bmicFreqData = new Uint8Array(bmicAnalyser.frequencyBinCount);
+    bmicMeterRaf = requestAnimationFrame(bmicVizLoop);
+    bmicStateEl.textContent = 'слушаю — говорите';
+    populateBmicDevices();
+  }
+
+  bmicCheckBtn.onclick = bmicCheck;
+  applySource(capSource);
+  populateBmicDevices();
+
+  // ============================================================ hotkeys
+  document.addEventListener('keydown', (e) => {
+    if (!docModal.hidden && e.key === 'Escape') { closeDoc(); e.preventDefault(); return; }
+    if (!docModal.hidden) return;   // the document viewer owns the keyboard
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.target.closest('input, textarea, select') || e.target.isContentEditable) return;
+    const k = e.key;
+    if (accOn.checked && (k === ' ' || k === 'Enter')) sendPending();
+    else if (accOn.checked && k === 'Escape') clearPending();
+    else if (k === '+' || k === '=') { fontSize = Math.min(34, fontSize + 1); applyFont(); }
+    else if (k === '-' || k === '_') { fontSize = Math.max(11, fontSize - 1); applyFont(); }
+    else if (k === 'h' || k === 'H' || k === 'р' || k === 'Р') togglePanel();
+    else if (k === 't' || k === 'T' || k === 'е' || k === 'Е') applyTheme(root.dataset.theme === 'light' ? 'dark' : 'light');
+    else if (k === 'Home' || k === 'End') { toTop(); }
+    else if ((k === 'c' || k === 'C' || k === 'с' || k === 'С') && current && current.raw) copyText(current.raw);
+    else return;
+    e.preventDefault();
+  });
+</script>
+</body>
+</html>

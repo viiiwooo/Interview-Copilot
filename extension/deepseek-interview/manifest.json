@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Interview Copilot — DeepSeek bridge",
+  "version": "1.2.0",
+  "description": "Types interview questions into chat.deepseek.com and streams the assistant reply back to the Interview Copilot server.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://chat.deepseek.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://chat.deepseek.com/*"],
+      "js": ["page_hook.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://chat.deepseek.com/*"],
+      "js": ["md.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

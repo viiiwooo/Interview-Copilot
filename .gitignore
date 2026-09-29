@@ -1,0 +1,15 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# IDE / agent scratch
+.idea/
+.qwen/
+
+# runtime data (personal: meeting transcripts and audio)
+logs/
+sessions/
+profile/
+models/
+*.wav
