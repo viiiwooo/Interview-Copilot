@@ -64,6 +64,9 @@ LLM_TOP_P = 0.9
 LLM_SYSTEM_PROMPT = (
     "Ты — ассистент кандидата на техническом собеседовании. "
     "Тебе передают вопрос интервьюера (распознанный с голоса). "
+    "Английские термины и аббревиатуры записаны кириллицей на слух и могут быть "
+    "искажены (например, «кубернетес», «эс кью эль», «джи ар пи си») — "
+    "восстанови их по контексту и в ответе пиши в оригинальном написании. "
     "Дай короткий, структурированный ответ по делу (3-6 пунктов или абзац), "
     "на русском, без вступлений и воды. Если вопрос не ясен — уточни в одну строку. "
     "Не выдумывай факты о себе кандидате; опирайся на общий технический опыт."
@@ -77,13 +80,10 @@ LLM_SYSTEM_PROMPT = (
 WEB_UI_PORT = 9090                   # http://localhost:9090
 DEEPSEEK_EXT_WS_PORT = WEB_UI_PORT   # ws://localhost:9090/api/deepseek_ws
 DEEPSEEK_EXT_TIMEOUT_S = 120.0       # give up waiting for an answer after this
-# Wrapper sent to DeepSeek around each recognized question. A short, explicit
-# format request makes DeepSeek answer faster (fewer tokens to generate).
-DEEPSEEK_PROMPT_TEMPLATE = (
-    "Вопрос интервьюера на техническом собеседовании (распознан с голоса, "
-    "возможны ошибки распознавания): «{question}»\n"
-    "Ответь кратко и по делу: 3-6 пунктов или один абзац, на русском, без вступлений."
-)
+# Message sent to DeepSeek for each recognized question. The web chat has no
+# system role, so the system prompt (editable in the UI) goes in front of the
+# question; with an empty prompt only the recognized text is sent.
+DEEPSEEK_PROMPT_TEMPLATE = "{system}\n\n{question}"
 
 
 # --- Accumulate mode (web UI) ------------------------------------------------

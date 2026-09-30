@@ -458,12 +458,7 @@
         <select id="llmBackend">
           <option value="local">💻 Локальный LLM</option>
           <option value="deepseek_ext">🌐 DeepSeek (расширение)</option>
-          <option value="deepseek">🌐 DeepSeek (web/CDP)</option>
         </select>
-        <div class="row" id="cdpPortRow" style="display:none">
-          <span class="hint">CDP порт</span>
-          <input type="number" id="cdpPort" min="1" max="65535" value="9222">
-        </div>
         <span class="hint" id="dsState"></span>
       </div>
     </section>
@@ -515,7 +510,7 @@
 
     <details class="card">
       <summary>Системный промпт</summary>
-      <textarea id="systemPrompt" placeholder="Системный промпт для локального LLM"></textarea>
+      <textarea id="systemPrompt" autocomplete="off" placeholder="Системный промпт (локальный LLM и DeepSeek)"></textarea>
     </details>
 
     <details class="card">
@@ -1075,11 +1070,11 @@
 
   // ======================================================= system prompt
   const promptEl = document.getElementById('systemPrompt');
-  fetch('/api/prompt').then((r) => r.json()).then((d) => { if (!promptEl.value) promptEl.value = d.prompt || ''; }).catch(() => {});
+  let promptLoaded = false;  // an empty prompt is valid, but only once the server's one is shown
+  fetch('/api/prompt').then((r) => r.json()).then((d) => { promptEl.value = d.prompt || ''; promptLoaded = true; }).catch(() => {});
   async function sendSystemPrompt() {
-    const p = promptEl.value.trim();
-    if (!p) return;
-    try { await postJSON('/api/prompt', { prompt: p }); } catch { /* server not ready */ }
+    if (!promptLoaded) return;
+    try { await postJSON('/api/prompt', { prompt: promptEl.value.trim() }); } catch { /* server not ready */ }
   }
   promptEl.addEventListener('change', sendSystemPrompt);
 
@@ -1107,8 +1102,6 @@
 
   // ========================================================= LLM backend
   const llmBackendSel = document.getElementById('llmBackend');
-  const cdpPortRow = document.getElementById('cdpPortRow');
-  const cdpPortInput = document.getElementById('cdpPort');
   const dsStateEl = document.getElementById('dsState');
 
   function setDsState(text, ok) {
@@ -1118,16 +1111,11 @@
 
   async function applyLlmBackend() {
     const backend = llmBackendSel.value;
-    cdpPortRow.style.display = backend === 'deepseek' ? '' : 'none';
     try {
-      const body = backend === 'deepseek'
-        ? { backend, cdp_port: parseInt(cdpPortInput.value, 10) || 9222 }
-        : { backend };
-      const data = await postJSON('/api/llm_backend', body);
+      const data = await postJSON('/api/llm_backend', { backend });
       if (backend === 'local') setDsState('', true);
       else if (data.status !== 'ok') setDsState(data.error || 'ошибка', false);
-      else if (backend === 'deepseek_ext') refreshExtState();
-      else setDsState('Chrome CDP на порту ' + (parseInt(cdpPortInput.value, 10) || 9222), true);
+      else refreshExtState();
     } catch (e) {
       setDsState('сервер недоступен: ' + e.message, false);
     }
@@ -1142,10 +1130,8 @@
   setInterval(() => { if (llmBackendSel.value === 'deepseek_ext') refreshExtState(); }, 15000);
 
   llmBackendSel.onchange = applyLlmBackend;
-  cdpPortInput.onchange = () => { if (llmBackendSel.value === 'deepseek') applyLlmBackend(); };
   fetch('/api/llm_backend').then((r) => r.json()).then((d) => {
-    llmBackendSel.value = d.backend || 'local';
-    cdpPortInput.value = d.cdp_port || 9222;
+    llmBackendSel.value = d.backend === 'deepseek_ext' ? 'deepseek_ext' : 'local';
     applyLlmBackend();
   }).catch(() => {});
 

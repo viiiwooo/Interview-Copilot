@@ -216,6 +216,24 @@ class PartialASR:
 partial_asr = PartialASR()
 
 
+def _resolve_local_llm(cfg: PipelineConfig) -> None:
+    """Resolve the local llama.cpp model before a capture starts.
+
+    With a DeepSeek backend the local LLM is only a fallback, so its absence
+    must not block the capture; with the local backend it is a hard error.
+    """
+    if state.llm_model:
+        return
+    try:
+        state.llm_model = resolve_model(cfg.llm_base_url)
+        set_status(f"LLM: {Path(state.llm_model).name}")
+    except Exception as e:
+        if state.llm_backend == "local":
+            raise RuntimeError(f"локальный LLM недоступен ({cfg.llm_base_url}) — "
+                               f"запустите llama.cpp или выберите DeepSeek: {e}") from e
+        print(f"[llm] local LLM unavailable, no fallback: {e}", flush=True)
+
+
 def process_segment(seg, cfg: PipelineConfig, asr: GigaAMASR, llm_model: str) -> None:
     """Process one speech segment: ASR → LLM → broadcast."""
     set_status(f"речь {seg.start:.1f}-{seg.end:.1f}s → распознаю...")
@@ -364,7 +382,8 @@ def _ask_deepseek(question: str, on_token) -> "LLMResult":
     if state._ds_client is None:
         state._ds_client = DeepSeekWebClient(state.cdp_port)
     try:
-        prompt = state.cfg.deepseek_prompt_template.format(question=question)
+        prompt = state.cfg.deepseek_prompt_template.format(
+            system=state.cfg.llm_system_prompt, question=question).strip()
         return state._ds_client.ask(prompt, on_token=on_token, on_replace=set_answer)
     except Exception as e:
         return _fallback_local(question, on_token, str(e))
@@ -375,7 +394,8 @@ def _ask_deepseek_ext(question: str, on_token) -> "LLMResult":
     from .deepseek_ext import make_llm_result
 
     cfg = state.cfg
-    prompt = cfg.deepseek_prompt_template.format(question=question)
+    prompt = cfg.deepseek_prompt_template.format(
+        system=cfg.llm_system_prompt, question=question).strip()
     try:
         # bridge.ask is async; run it on the uvicorn loop so it can await the WS.
         data = asyncio.run_coroutine_threadsafe(
@@ -731,9 +751,7 @@ def _live_loop(device: int, stop: threading.Event, gain: float) -> None:
             t0 = time.time()
             state.asr = GigaAMASR(cfg.gigaam_model, cfg.gigaam_device, cfg.gigaam_fp16_encoder)
             set_status(f"GigaAM готов за {time.time()-t0:.1f}s")
-        if not state.llm_model:
-            state.llm_model = resolve_model(cfg.llm_base_url)
-            set_status(f"LLM: {Path(state.llm_model).name}")
+        _resolve_local_llm(cfg)
         # local VAD instance: a previous capture winding down must not feed ours
         vad = StreamingVAD(cfg.sample_rate, cfg.vad_threshold, cfg.vad_min_speech_ms,
                            cfg.vad_min_silence_ms, cfg.vad_max_silence_ms, cfg.vad_max_speech_s,
@@ -880,9 +898,7 @@ def _browser_setup(source: str = "mic") -> None:
             t0 = time.time()
             state.asr = GigaAMASR(cfg.gigaam_model, cfg.gigaam_device, cfg.gigaam_fp16_encoder)
             set_status(f"GigaAM готов за {time.time()-t0:.1f}s")
-        if not state.llm_model:
-            state.llm_model = resolve_model(cfg.llm_base_url)
-            set_status(f"LLM: {Path(state.llm_model).name}")
+        _resolve_local_llm(cfg)
         if not state.bactive:
             return  # stopped during the load: the queues are abandoned
         vad = StreamingVAD(cfg.sample_rate, cfg.vad_threshold, cfg.vad_min_speech_ms,
@@ -1002,9 +1018,8 @@ async def get_system_prompt():
 
 @app.post("/api/prompt")
 async def set_system_prompt(req: PromptRequest):
-    """Set the LLM system prompt for this session (sent once from the browser)."""
-    if req.prompt.strip():
-        state.cfg.llm_system_prompt = req.prompt.strip()
+    """Set the LLM system prompt for this session; empty means no system prompt."""
+    state.cfg.llm_system_prompt = req.prompt.strip()
     return {"status": "ok"}
 
 
