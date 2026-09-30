@@ -212,7 +212,7 @@ winget install Gyan.FFmpeg
   таймауту тишины.
 
 Подробности — в [extension/deepseek-interview/README.md](extension/deepseek-interview/README.md).
-Вопрос отправляется в DeepSeek с просьбой ответить кратко (`DEEPSEEK_PROMPT_TEMPLATE`).
+В DeepSeek отправляется системный промпт из UI и распознанный вопрос (`DEEPSEEK_PROMPT_TEMPLATE`); при пустом промпте — только вопрос.
 
 ## CLI-режимы
 
@@ -256,7 +256,7 @@ VB-Cable); веб-захват вкладки его не требует.
 | `LLM_MAX_TOKENS` | 1400 | ≈ 3000 символов ответа |
 | `LLM_DISABLE_THINKING` | True | отключить reasoning модели |
 | `LLM_SYSTEM_PROMPT` | … | промпт локального LLM (меняется и в UI) |
-| `DEEPSEEK_PROMPT_TEMPLATE` | … | обёртка вопроса для DeepSeek |
+| `DEEPSEEK_PROMPT_TEMPLATE` | … | сообщение для DeepSeek: системный промпт + вопрос |
 | `VAD_THRESHOLD` / `VAD_MIN_SILENCE_MS` | 0.3 / 300 | чувствительность VAD и пауза конца фразы |
 | `PARTIAL_ASR_MS` | 1000 | период живого распознавания (0 — выкл.) |
 | `GIGAM_DEVICE` | `cpu` | RNN-T-декодер GigaAM быстрее на CPU |

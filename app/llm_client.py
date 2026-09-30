@@ -42,12 +42,12 @@ def resolve_model(base_url: str) -> str:
 def _stream(base_url: str, model: str, system: str, user: str,
             max_tokens: int, temperature: float, top_p: float,
             disable_thinking: bool) -> Iterator[str]:
+    messages = [{"role": "user", "content": user}]
+    if system:
+        messages.insert(0, {"role": "system", "content": system})
     payload = {
         "model": model,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
+        "messages": messages,
         "max_tokens": max_tokens,
         "temperature": temperature,
         "top_p": top_p,
