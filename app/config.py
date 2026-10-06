@@ -2,6 +2,7 @@
 
 Pipeline: loopback -> Silero VAD -> GigaAM (ASR) -> llama.cpp (LLM) -> overlay window.
 """
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -41,11 +42,12 @@ PARTIAL_ASR_MS = 1000
 
 # --- ASR (GigaAM) -----------------------------------------------------------
 GIGAM_MODEL = "v3_e2e_rnnt"     # punctuation + casing + ITN, lowest WER
-# NOTE: on this box the RNN-T decoder is FASTER on CPU than GPU (0.25s vs ~4.8s
-# for a 5s clip) because the decoder loop doesn't parallelize well on the GPU.
-# Keep GigaAM on CPU (28 cores) and leave the GPUs for the LLM.
-GIGAM_DEVICE = "cpu"            # "cuda" or "cpu"
-GIGAM_FP16_ENCODER = False
+# Measured on this box for a 5s clip: CPU ~0.25-0.5s, GPU ~0.1-0.2s after a
+# one-time ~12s CUDA warmup (done at load, see asr.py).
+# Default is CPU (28 cores), leaving the GPUs for the LLM. Override with the
+# GIGAAM_DEVICE env var or switch in the web UI ("cpu", "cuda", "cuda:1").
+GIGAM_DEVICE = os.environ.get("GIGAAM_DEVICE", "cpu")
+GIGAM_FP16_ENCODER = True       # fp16 encoder; applied only on cuda
 
 # --- LLM (llama.cpp server) -------------------------------------------------
 # OpenAI-compatible base URL (with or without the trailing /v1). Use 127.0.0.1,
