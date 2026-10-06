@@ -29,6 +29,19 @@ def _normalize(x: np.ndarray) -> np.ndarray:
     return np.clip(x * gain, -1.0, 1.0) if gain > 1.0 else x
 
 
+def resolve_device(device: str) -> str:
+    """Normalize "gpu" to "cuda" and fall back to CPU when CUDA is missing."""
+    device = (device or "cpu").strip().lower()
+    if device == "gpu":
+        device = "cuda"
+    if device.startswith("cuda"):
+        import torch
+        if not torch.cuda.is_available():
+            print(f"[asr] {device} unavailable (torch without CUDA?), using cpu", flush=True)
+            return "cpu"
+    return device
+
+
 @dataclass
 class ASRResult:
     text: str
@@ -42,11 +55,19 @@ class GigaAMASR:
                  fp16_encoder: bool = True):
         import gigaam
         self._gigaam = gigaam
+        device = resolve_device(device)
+        # fp16 only helps (and only works) on the GPU
+        fp16_encoder = fp16_encoder and device.startswith("cuda")
         t0 = time.time()
         self.model = gigaam.load_model(model_name, fp16_encoder=fp16_encoder, device=device)
-        self.t_load = time.time() - t0
         self.model_name = model_name
         self.device = device
+        self.t_load = 0.0
+        if device.startswith("cuda"):
+            # the first CUDA call takes ~12s (kernel setup); pay it at load,
+            # not on the first real phrase
+            self.transcribe(np.zeros(16000, dtype=np.int16))
+        self.t_load = time.time() - t0
 
     def transcribe(self, audio: np.ndarray, sample_rate: int = 16000) -> ASRResult:
         """Transcribe an int16 mono array. Returns text + timing."""

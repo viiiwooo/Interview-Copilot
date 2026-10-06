@@ -109,6 +109,7 @@ winget install Gyan.FFmpeg
 
    ```bash
    launch_web.bat        # или .venv\Scripts\python.exe -m uvicorn app.web:app --port 9090
+   launch_web_gpu.bat    # то же, но GigaAM на GPU (GIGAAM_DEVICE=cuda)
    ```
 
    Откройте http://localhost:9090 в Chrome, лучше в отдельном окне у верхнего края
@@ -259,7 +260,7 @@ VB-Cable); веб-захват вкладки его не требует.
 | `DEEPSEEK_PROMPT_TEMPLATE` | … | сообщение для DeepSeek: системный промпт + вопрос |
 | `VAD_THRESHOLD` / `VAD_MIN_SILENCE_MS` | 0.3 / 300 | чувствительность VAD и пауза конца фразы |
 | `PARTIAL_ASR_MS` | 1000 | период живого распознавания (0 — выкл.) |
-| `GIGAM_DEVICE` | `cpu` | RNN-T-декодер GigaAM быстрее на CPU |
+| `GIGAM_DEVICE` | `cpu` | устройство GigaAM: `cpu` / `cuda` (env `GIGAAM_DEVICE`, переключатель в UI) |
 | `ACCUMULATE_DEFAULT` / `SEND_HOTKEY` | False / `F8` | режим накопления при старте |
 | `WEB_UI_PORT` | 9090 | порт веб-интерфейса и WS расширения |
 | `RECORD_DEFAULT` / `RECORD_AUDIO` | False / True | запись встречи при старте, сохранять аудио |

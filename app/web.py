@@ -32,7 +32,7 @@ from .config import (PipelineConfig, LOGS, RUN, WEB_UI_PORT, ACCUMULATE_DEFAULT,
                      REVIEW_MAX_TOKENS, REVIEW_MAX_CHARS)
 from .main import Pipeline, _load_wav_int16
 from .vad import offline_segments, StreamingVAD
-from .asr import GigaAMASR
+from .asr import GigaAMASR, resolve_device
 from .llm_client import ask, resolve_model
 from .deepseek_web import DeepSeekWebClient, is_available as deepseek_is_available
 from .deepseek_ext import ExtBridge, bridge_available
@@ -93,6 +93,8 @@ class AppState:
         self.answer_lock = threading.Lock()
         # final and live (partial) transcription share one GigaAM model
         self.asr_lock = threading.Lock()
+        # serializes GigaAM loads (first start vs a CPU/GPU switch from the UI)
+        self.asr_load_lock = threading.Lock()
         # meeting recording (transcript.md + audio.wav per session) and review
         self.recorder = SessionRecorder(SESSIONS)
         self.recorder.enabled = RECORD_DEFAULT
@@ -734,6 +736,43 @@ def _broadcast_live(running: bool, device: int | None, gain: float | None = None
 _SEG_SENTINEL = object()
 
 
+def _ensure_asr() -> GigaAMASR:
+    """Load GigaAM once on the configured device; all captures share it."""
+    with state.asr_load_lock:
+        if state.asr is None:
+            cfg = state.cfg
+            set_status(f"загружаю GigaAM ({cfg.gigaam_device})...")
+            t0 = time.time()
+            state.asr = GigaAMASR(cfg.gigaam_model, cfg.gigaam_device, cfg.gigaam_fp16_encoder)
+            set_status(f"GigaAM готов за {time.time()-t0:.1f}s ({state.asr.device})")
+        return state.asr
+
+
+def _switch_asr_device(device: str) -> None:
+    """Reload a loaded GigaAM on another device. The old model keeps serving
+    a running capture until the new one is ready, then they are swapped."""
+    with state.asr_load_lock:
+        old = state.asr
+        if old is None or old.device == device:
+            return  # not loaded yet: the next start loads on cfg.gigaam_device
+        cfg = state.cfg
+        set_status(f"перегружаю GigaAM на {device}...")
+        t0 = time.time()
+        try:
+            new = GigaAMASR(cfg.gigaam_model, device, cfg.gigaam_fp16_encoder)
+        except Exception as e:
+            cfg.gigaam_device = old.device
+            set_status(f"GigaAM на {device} не загрузился: {e}")
+            return
+        with state.asr_lock:
+            state.asr = new
+        if old.device.startswith("cuda"):
+            del old
+            import torch
+            torch.cuda.empty_cache()
+        set_status(f"GigaAM на {new.device} готов за {time.time()-t0:.1f}s")
+
+
 def _live_loop(device: int, stop: threading.Event, gain: float) -> None:
     """Capture mono 16 kHz audio from `device`, feed VAD, process segments.
 
@@ -746,11 +785,7 @@ def _live_loop(device: int, stop: threading.Event, gain: float) -> None:
         import sounddevice as sd
         cfg = state.cfg
 
-        set_status("загружаю GigaAM...")
-        if state.asr is None:
-            t0 = time.time()
-            state.asr = GigaAMASR(cfg.gigaam_model, cfg.gigaam_device, cfg.gigaam_fp16_encoder)
-            set_status(f"GigaAM готов за {time.time()-t0:.1f}s")
+        _ensure_asr()
         _resolve_local_llm(cfg)
         # local VAD instance: a previous capture winding down must not feed ours
         vad = StreamingVAD(cfg.sample_rate, cfg.vad_threshold, cfg.vad_min_speech_ms,
@@ -893,11 +928,7 @@ def _browser_setup(source: str = "mic") -> None:
     seg_q = state.bseg_q
     stop = state.bstop
     try:
-        set_status("загружаю GigaAM...")
-        if state.asr is None:
-            t0 = time.time()
-            state.asr = GigaAMASR(cfg.gigaam_model, cfg.gigaam_device, cfg.gigaam_fp16_encoder)
-            set_status(f"GigaAM готов за {time.time()-t0:.1f}s")
+        _ensure_asr()
         _resolve_local_llm(cfg)
         if not state.bactive:
             return  # stopped during the load: the queues are abandoned
@@ -1073,6 +1104,28 @@ async def get_llm_backend():
         ok, info = False, ""
     return {"backend": state.llm_backend, "cdp_port": state.cdp_port,
             "deepseek_ok": ok, "deepseek_info": info}
+
+
+class AsrDeviceRequest(BaseModel):
+    device: str           # "cpu" | "cuda" | "cuda:N"
+
+
+@app.get("/api/asr_device")
+async def get_asr_device():
+    """Configured GigaAM device, the device of the loaded model and CUDA availability."""
+    import torch
+    return {"device": state.cfg.gigaam_device,
+            "loaded": state.asr.device if state.asr is not None else None,
+            "cuda": torch.cuda.is_available()}
+
+
+@app.post("/api/asr_device")
+async def set_asr_device(req: AsrDeviceRequest):
+    """Switch GigaAM between CPU and GPU; a loaded model is reloaded in the background."""
+    device = resolve_device(req.device)
+    state.cfg.gigaam_device = device
+    threading.Thread(target=_switch_asr_device, args=(device,), daemon=True).start()
+    return {"status": "ok", "device": device}
 
 
 # ---- DeepSeek extension WebSocket ------------------------------------------

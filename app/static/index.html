@@ -464,6 +464,17 @@
     </section>
 
     <section class="card">
+      <div class="card-title">GigaAM (распознавание)</div>
+      <div class="stack">
+        <select id="asrDevice">
+          <option value="cpu">🧮 CPU</option>
+          <option value="cuda">🎮 GPU (CUDA)</option>
+        </select>
+        <span class="hint" id="asrState"></span>
+      </div>
+    </section>
+
+    <section class="card">
       <div class="card-title">Отправка вопросов</div>
       <div class="stack">
         <label class="hint" style="display:flex;gap:6px;align-items:center">
@@ -1134,6 +1145,32 @@
     llmBackendSel.value = d.backend === 'deepseek_ext' ? 'deepseek_ext' : 'local';
     applyLlmBackend();
   }).catch(() => {});
+
+  // ========================================================= GigaAM device
+  const asrDeviceSel = document.getElementById('asrDevice');
+  const asrStateEl = document.getElementById('asrState');
+
+  function showAsrDevice(d) {
+    asrDeviceSel.value = d.device.startsWith('cuda') ? 'cuda' : 'cpu';
+    asrDeviceSel.querySelector('option[value="cuda"]').disabled = !d.cuda;
+    asrStateEl.textContent = !d.cuda ? 'CUDA недоступна'
+      : d.loaded ? 'загружена на ' + d.loaded : 'загрузится при старте';
+  }
+
+  asrDeviceSel.onchange = async () => {
+    try {
+      await postJSON('/api/asr_device', { device: asrDeviceSel.value });
+      asrStateEl.textContent = 'применяю...';
+      setTimeout(refreshAsrDevice, 3000);
+    } catch (e) {
+      asrStateEl.textContent = 'сервер недоступен: ' + e.message;
+    }
+  };
+
+  function refreshAsrDevice() {
+    fetch('/api/asr_device').then((r) => r.json()).then(showAsrDevice).catch(() => {});
+  }
+  refreshAsrDevice();
 
   // ============================== browser capture: Web Audio -> WS frames
   const bmicSelect = document.getElementById('bmicDevice');

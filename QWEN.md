@@ -84,7 +84,7 @@ prompts/ profile/   # пусто (резерв)
 
 ## Ключевые факты и ограничения
 
-- **GigaAM на CPU** (28 ядер): RNN-T-декодер быстрее на CPU (0.25с vs ~4.8с на GPU для 5с аудио). Не переносить на GPU.
+- **GigaAM по умолчанию на CPU** (28 ядер, GPU остаются LLM). GPU включается через `GIGAAM_DEVICE=cuda` или переключатель в веб-UI: 0.1–0.2с на 5с аудио после прогрева ~12с при загрузке (на CPU 0.25–0.5с).
 - **LLM-сервер обязателен**: `resolve_model()` ходит на `LLM_BASE_URL` (`http://127.0.0.1:8080/v1`) `/models`; reasoning модели отключается в каждом запросе (`LLM_DISABLE_THINKING`); без сервера пайплайн падает.
 - **Loopback-устройство** на этой машине нет: нужен VB-Cable (vb-cable.com) или включённый «Стерео микшер» (см. `run/enable_stereomix.py`). Браузер должен играть через это устройство. Устройство подбирается по подстроке `LOOPBACK_DEVICE_HINT = "Loopback"` в `config.py`.
 - **Микрофон C920** = device 15, тихий (peak ~13-14%), поэтому `MIC_GAIN = 4.0` усиливает сигнал перед VAD/ASR.
@@ -118,7 +118,7 @@ prompts/ profile/   # пусто (резерв)
 - **LLM-клиент** — на `urllib` (без httpx/requests-зависимости), парсинг SSE построчно (`data:` / `[DONE]`).
 - **Тайминги** измеряются везде (`t_load`, `t_infer`, `ttft`, `tps`) и пишутся в `logs/latency_report.json`; каждая пара вопрос/ответ дублируется в `logs/hints.log`.
 - **Тестов нет** (нет pytest/тест-фреймворка): валидация — скрипты в `run/` и отчёт задержек. Перед изменениями пайплайна прогоняйте `app.main file --wav run/test_question.wav --no-overlay`.
-- **Не использовать** `--mmproj` у llama-server (vision не нужен), GigaAM не на GPU.
+- **Не использовать** `--mmproj` у llama-server (vision не нужен).
 
 ## Зависимости
 
